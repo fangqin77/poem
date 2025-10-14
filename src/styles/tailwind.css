@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* 全局基础增强，避免模板样式干扰布局 */
+@layer base {
+  html, body, #app { height: 100%; }
+  img, video { max-width: 100%; height: auto; display: block; }
+  body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+}
+
+/* 自定义圆角按钮工具类 */
+.rounded-button {
+  border-radius: 9999px;
+}
+/* 兼容类名 `!rounded-button`，确保重要性提升 */
+.\!rounded-button {
+  border-radius: 9999px !important;
+}
