@@ -8,6 +8,7 @@
             <img src="https://ai-public.mastergo.com/ai/img_res/c20bf0ceedbeaa89a230b6003c5e368c.jpg" alt="Logo" class="h-10">
           </RouterLink>
         </div>
+
         <div class="hidden md:flex space-x-8">
           <RouterLink to="/" class="text-gray-800 hover:text-blue-600 font-medium">首页</RouterLink>
           <RouterLink to="/categories" class="text-gray-800 hover:text-blue-600 font-medium">诗词分类</RouterLink>
@@ -15,9 +16,41 @@
           <RouterLink to="/articles" class="text-gray-800 hover:text-blue-600 font-medium">赏析文章</RouterLink>
           <RouterLink to="/about" class="text-gray-800 hover:text-blue-600 font-medium">关于我们</RouterLink>
         </div>
-        <div class="relative">
-          <input v-model="q" @keyup.enter="goSearch" type="text" placeholder="搜索诗词、诗人或文章..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-          <i @click="goSearch" class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer" aria-label="搜索"></i>
+
+        <div class="flex items-center gap-4">
+          <div class="relative">
+            <input v-model="q" @keyup.enter="goSearch" type="text" placeholder="搜索诗词、诗人或文章..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            <i @click="goSearch" class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer" aria-label="搜索"></i>
+          </div>
+
+          <!-- 统一鉴权入口：邮箱魔法链接登录/登出 -->
+          <div class="hidden md:flex items-center gap-2">
+            <template v-if="!userId">
+              <input
+                v-model="email"
+                type="email"
+                placeholder="邮箱登录"
+                class="w-44 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50"
+                :disabled="authLoading || !validEmail"
+                @click="loginWithEmail"
+              >
+                {{ authLoading ? '发送中…' : '登录' }}
+              </button>
+            </template>
+            <template v-else>
+              <span class="text-sm text-gray-600">已登录</span>
+              <button
+                class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium border border-gray-300 hover:bg-gray-50"
+                :disabled="authLoading"
+                @click="logout"
+              >
+                退出
+              </button>
+            </template>
+          </div>
         </div>
       </div>
     </nav>
@@ -70,12 +103,69 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '@/services/supabaseClient'
+
 const router = useRouter()
 const q = ref('')
 const goSearch = () => {
   const keyword = q.value?.trim()
   if (keyword) router.push({ name: 'search', query: { q: keyword } })
 }
+
+/* 统一鉴权（邮箱魔法链接） */
+const userId = ref(null)
+const email = ref('')
+const authLoading = ref(false)
+const validEmail = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value))
+
+async function resolveAuthState() {
+  try {
+    const { data } = await supabase.auth.getUser()
+    userId.value = data?.user?.id || null
+  } catch {
+    userId.value = null
+  }
+}
+
+async function loginWithEmail() {
+  if (!validEmail.value) return
+  authLoading.value = true
+  try {
+    await supabase.auth.signInWithOtp({
+      email: email.value.trim(),
+      options: { emailRedirectTo: window.location.origin }
+    })
+    // 可选：提示已发送邮件
+  } finally {
+    authLoading.value = false
+  }
+}
+
+async function logout() {
+  authLoading.value = true
+  try {
+    await supabase.auth.signOut()
+    userId.value = null
+  } finally {
+    authLoading.value = false
+  }
+}
+
+let authUnsub = null
+onMounted(async () => {
+  await resolveAuthState()
+  const { data } = supabase.auth.onAuthStateChange(async () => {
+    await resolveAuthState()
+  })
+  authUnsub = data.subscription
+})
+onBeforeUnmount(() => {
+  try {
+    if (authUnsub && typeof authUnsub.unsubscribe === 'function') {
+      authUnsub.unsubscribe()
+    }
+  } catch {}
+})
 </script>

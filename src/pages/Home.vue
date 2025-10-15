@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <!-- Featured Poems -->
+    <!-- Featured Poems (静态示例保留) -->
     <section class="py-16 bg-white">
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
         <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">精选诗词</h2>
@@ -40,6 +40,54 @@
       </div>
     </section>
 
+    <!-- 最新诗词（动态，支持“已收藏”标记与只看收藏） -->
+    <section class="py-16 bg-gray-50">
+      <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold text-gray-800">最新诗词</h2>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" v-model="onlyFav" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            只看收藏
+          </label>
+        </div>
+
+        <div v-if="loading" class="text-gray-500">加载中…</div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <RouterLink
+            v-for="item in filteredItems"
+            :key="item.id"
+            class="block bg-white rounded-lg p-5 border border-gray-100 shadow-sm hover:shadow-md transition"
+            :to="`/poems/${item.id}`"
+          >
+            <div class="flex items-start justify-between">
+              <h3 class="text-lg font-semibold text-gray-800">{{ item.title }}</h3>
+              <span
+                v-if="favSet.has(item.id)"
+                class="ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-700"
+              >
+                已收藏
+              </span>
+            </div>
+            <p class="text-gray-600 mt-1">
+              <span>{{ item.poet_name || '佚名' }}</span>
+              <span v-if="item.dynasty"> · {{ item.dynasty }}</span>
+            </p>
+            <p class="text-gray-700 line-clamp-2 mt-3 whitespace-pre-line">{{ (item.content || '').slice(0, 80) }}</p>
+          </RouterLink>
+        </div>
+
+        <div class="text-center mt-8">
+          <button
+            class="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+            :disabled="loadingMore || !hasMore"
+            @click="loadMore"
+          >
+            {{ loadingMore ? '加载中…' : (hasMore ? '加载更多' : '没有更多了') }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- Categories -->
     <section class="py-16 bg-gray-50">
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
@@ -64,7 +112,7 @@
             <span class="text-gray-700 font-medium group-hover:text-blue-600">元曲</span>
           </RouterLink>
           <RouterLink to="/categories?type=gufeng" class="flex flex-col items-center group">
-            <div class="w-20 h-20 rounded-full bg-yellow-100 flex items-center justify-center mb-4">
+            <div class="w-20 h-20 rounded-full bg-yellow-100 flex items-center justify中心 mb-4">
               <img src="https://ai-public.mastergo.com/ai/img_res/e9f4d79884121905add1d86fbbb314df.jpg" alt="古风" class="w-12 h-12">
             </div>
             <span class="text-gray-700 font-medium group-hover:text-blue-600">古风</span>
@@ -120,8 +168,8 @@
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
         <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">诗人介绍</h2>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
-          <RouterLink to="/poets/1" class="text-center group">
-            <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-white shadow-lg mb-4">
+          <RouterLink to="/poets/1" class="text中心 group">
+            <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border白色 shadow-lg mb-4">
               <img src="https://ai-public.mastergo.com/ai/img_res/7c36e7c2db897b4f45516737d34b668b.jpg" alt="李白" class="w-full h-full object-cover">
             </div>
             <h3 class="text-xl font-semibold text-gray-800 group-hover:text-blue-600">李白</h3>
@@ -153,3 +201,87 @@
     </section>
   </div>
 </template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '@/services/supabaseClient'
+
+const pageSize = 12
+const items = ref([])
+const loading = ref(true)
+const loadingMore = ref(false)
+const page = ref(1)
+const hasMore = ref(true)
+
+const userId = ref(null)
+const favSet = ref(new Set())
+const onlyFav = ref(false)
+
+const filteredItems = computed(() => {
+  if (!onlyFav.value) return items.value
+  return items.value.filter(it => favSet.value.has(it.id))
+})
+
+async function loadUser() {
+  try {
+    const { data } = await supabase.auth.getUser()
+    userId.value = data?.user?.id || null
+  } catch {
+    userId.value = null
+  }
+}
+
+async function loadFavorites() {
+  favSet.value = new Set()
+  if (!userId.value) return
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('poem_id')
+    .eq('user_id', userId.value)
+    .limit(1000)
+  if (!error && data) {
+    favSet.value = new Set(data.map(d => d.poem_id))
+  }
+}
+
+async function loadLatest(reset = true) {
+  if (reset) {
+    loading.value = true
+    page.value = 1
+    hasMore.value = true
+    items.value = []
+  } else {
+    loadingMore.value = true
+  }
+
+  const from = (page.value - 1) * pageSize
+  const to = from + pageSize - 1
+  const { data, error } = await supabase
+    .from('v_poem_with_categories')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (!error && data) {
+    items.value = reset ? data : [...items.value, ...data]
+    if (data.length < pageSize) hasMore.value = false
+  } else {
+    hasMore.value = false
+  }
+
+  loading.value = false
+  loadingMore.value = false
+}
+
+async function loadMore() {
+  if (!hasMore.value) return
+  page.value += 1
+  await loadLatest(false)
+}
+
+onMounted(async () => {
+  await loadUser()
+  await loadFavorites()
+  await loadLatest(true)
+})
+</script>
