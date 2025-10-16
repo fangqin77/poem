@@ -121,6 +121,7 @@ const authLoading = ref(false)
 const validEmail = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value))
 
 async function resolveAuthState() {
+  if (!supabase) return
   try {
     const { data } = await supabase.auth.getUser()
     userId.value = data?.user?.id || null
@@ -130,20 +131,20 @@ async function resolveAuthState() {
 }
 
 async function loginWithEmail() {
-  if (!validEmail.value) return
+  if (!validEmail.value || !supabase) return
   authLoading.value = true
   try {
     await supabase.auth.signInWithOtp({
       email: email.value.trim(),
       options: { emailRedirectTo: window.location.origin }
     })
-    // 可选：提示已发送邮件
   } finally {
     authLoading.value = false
   }
 }
 
 async function logout() {
+  if (!supabase) return
   authLoading.value = true
   try {
     await supabase.auth.signOut()
@@ -156,10 +157,12 @@ async function logout() {
 let authUnsub = null
 onMounted(async () => {
   await resolveAuthState()
-  const { data } = supabase.auth.onAuthStateChange(async () => {
-    await resolveAuthState()
-  })
-  authUnsub = data.subscription
+  if (supabase) {
+    const { data } = supabase.auth.onAuthStateChange(async () => {
+      await resolveAuthState()
+    })
+    authUnsub = data.subscription
+  }
 })
 onBeforeUnmount(() => {
   try {

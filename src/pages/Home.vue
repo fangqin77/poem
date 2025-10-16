@@ -223,6 +223,7 @@ const filteredItems = computed(() => {
 })
 
 async function loadUser() {
+  if (!supabase) { userId.value = null; return }
   try {
     const { data } = await supabase.auth.getUser()
     userId.value = data?.user?.id || null
@@ -233,7 +234,7 @@ async function loadUser() {
 
 async function loadFavorites() {
   favSet.value = new Set()
-  if (!userId.value) return
+  if (!userId.value || !supabase) return
   const { data, error } = await supabase
     .from('favorites')
     .select('poem_id')
@@ -252,6 +253,14 @@ async function loadLatest(reset = true) {
     items.value = []
   } else {
     loadingMore.value = true
+  }
+
+  if (!supabase) {
+    // 未配置 Supabase 时，不发请求，直接显示空列表
+    loading.value = false
+    loadingMore.value = false
+    hasMore.value = false
+    return
   }
 
   const from = (page.value - 1) * pageSize
