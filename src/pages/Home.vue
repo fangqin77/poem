@@ -11,23 +11,33 @@
       </div>
     </div>
 
-    <!-- Featured Poems（动态：按标题拉取 uuid） -->
+    <!-- Featured Poems（动态带兜底） -->
     <section class="py-16 bg-white">
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
         <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">精选诗词</h2>
         <div v-if="featuredPoemsLoading" class="text-center text-gray-500">加载中…</div>
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <RouterLink
-            v-for="fp in featuredPoems"
-            :key="fp.id"
-            class="block bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
-            :to="`/poems/${fp.id}`"
-          >
-            <h3 class="text-xl font-semibold text-gray-800 mb-2">{{ fp.title }}</h3>
-            <p class="text-gray-600 mb-1">{{ fp.poet_name || '佚名' }} <span v-if="fp.dynasty">· {{ fp.dynasty }}</span></p>
-            <p class="text-gray-700 italic mt-4 line-clamp-3 whitespace-pre-line">{{ (fp.content || '').slice(0, 80) }}</p>
-          </RouterLink>
-        </div>
+        <template v-else>
+          <div v-if="featuredPoems.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <RouterLink
+              v-for="fp in featuredPoems"
+              :key="fp.id"
+              class="block bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+              :to="`/poems/${fp.id}`"
+            >
+              <h3 class="text-xl font-semibold text-gray-800 mb-2">{{ fp.title }}</h3>
+              <p class="text-gray-600 mb-1">{{ fp.poet_name || '佚名' }} <span v-if="fp.dynasty">· {{ fp.dynasty }}</span></p>
+              <p class="text-gray-700 italic mt-4 line-clamp-3 whitespace-pre-line">{{ (fp.content || '').slice(0, 80) }}</p>
+            </RouterLink>
+          </div>
+          <div v-else class="text-center text-gray-500">
+            暂无精选诗词数据
+            <div class="mt-4">
+              <RouterLink to="/categories" class="inline-block rounded-md border px-4 py-2 text-sm hover:bg-gray-50">
+                去分类页看看
+              </RouterLink>
+            </div>
+          </div>
+        </template>
       </div>
     </section>
 
@@ -118,25 +128,35 @@
       </div>
     </section>
 
-    <!-- Poets（动态：按姓名拉取 uuid） -->
+    <!-- Poets（动态带兜底） -->
     <section class="py-16 bg-gray-50">
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
-        <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">诗人介绍</h2>
+        <h2 class="text-3次 font-bold text-center text-gray-800 mb-12">诗人介绍</h2>
         <div v-if="featuredPoetsLoading" class="text-center text-gray-500">加载中…</div>
-        <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-8">
-          <RouterLink
-            v-for="pt in featuredPoets"
-            :key="pt.id"
-            class="text-center group"
-            :to="`/poets/${pt.id}`"
-          >
-            <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-white shadow-lg mb-4">
-              <img :src="pt.avatar || defaultPoetAvatar" :alt="pt.name" class="w-full h-full object-cover" />
+        <template v-else>
+          <div v-if="featuredPoets.length" class="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <RouterLink
+              v-for="pt in featuredPoets"
+              :key="pt.id"
+              class="text-center group"
+              :to="`/poets/${pt.id}`"
+            >
+              <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-white shadow-lg mb-4">
+                <img :src="pt.avatar || defaultPoetAvatar" :alt="pt.name" class="w-full h-full object-cover" />
+              </div>
+              <h3 class="text-xl font-semibold text-gray-800 group-hover:text-blue-600">{{ pt.name }}</h3>
+              <p class="text-gray-600">{{ pt.dynasty || '' }}</p>
+            </RouterLink>
+          </div>
+          <div v-else class="text-center text-gray-500">
+            暂无精选诗人数据
+            <div class="mt-4">
+              <RouterLink to="/poets" class="inline-block rounded-md border px-4 py-2 text-sm hover:bg-gray-50">
+                去诗人列表
+              </RouterLink>
             </div>
-            <h3 class="text-xl font-semibold text-gray-800 group-hover:text-blue-600">{{ pt.name }}</h3>
-            <p class="text-gray-600">{{ pt.dynasty || '' }}</p>
-          </RouterLink>
-        </div>
+          </div>
+        </template>
       </div>
     </section>
   </div>
@@ -162,7 +182,7 @@ const filteredItems = computed(() => {
   return items.value.filter(it => favSet.value.has(it.id))
 })
 
-// Featured (动态) ---------------------------------
+// Featured（动态+兜底） ---------------------------------
 const featuredPoemsLoading = ref(true)
 const featuredPoetsLoading = ref(true)
 const featuredPoems = ref([])
@@ -170,24 +190,33 @@ const featuredPoets = ref([])
 
 const defaultPoetAvatar = 'https://ai-public.mastergo.com/ai/img_res/7c36e7c2db897b4f45516737d34b668b.jpg'
 
-// 需要展示的固定标题/姓名，但以数据库真实 uuid 跳转
+// 目标标题/姓名（若匹配不到则回退到“最新”）
 const featuredPoemTitles = ['静夜思', '水调歌头·明月几时有', '春晓', '念奴娇·赤壁怀古']
 const featuredPoetNames = ['李白', '杜甫', '苏轼', '李清照']
 
 async function loadFeaturedPoems() {
   featuredPoemsLoading.value = true
   try {
-    const { data, error } = await supabase
-      .from('v_poem_with_categories')
-      .select('id,title,poet_name,dynasty,content')
-      .in('title', featuredPoemTitles)
-    if (!error && data) {
-      // 保持标题顺序
-      const map = new Map(data.map(d => [d.title, d]))
-      featuredPoems.value = featuredPoemTitles.map(t => map.get(t)).filter(Boolean)
-    } else {
-      featuredPoems.value = []
+    let rows = []
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('v_poem_with_categories')
+        .select('id,title,poet_name,dynasty,content')
+        .in('title', featuredPoemTitles)
+      if (!error && data && data.length) {
+        const map = new Map(data.map(d => [d.title, d]))
+        rows = featuredPoemTitles.map(t => map.get(t)).filter(Boolean)
+      } else {
+        // 兜底：取最新4条
+        const { data: latest, error: e2 } = await supabase
+          .from('v_poem_with_categories')
+          .select('id,title,poet_name,dynasty,content')
+          .order('created_at', { ascending: false })
+          .limit(4)
+        if (!e2 && latest) rows = latest
+      }
     }
+    featuredPoems.value = rows || []
   } catch {
     featuredPoems.value = []
   } finally {
@@ -198,16 +227,26 @@ async function loadFeaturedPoems() {
 async function loadFeaturedPoets() {
   featuredPoetsLoading.value = true
   try {
-    const { data, error } = await supabase
-      .from('poets')
-      .select('id,name,dynasty,avatar')
-      .in('name', featuredPoetNames)
-    if (!error && data) {
-      const map = new Map(data.map(d => [d.name, d]))
-      featuredPoets.value = featuredPoetNames.map(n => map.get(n)).filter(Boolean)
-    } else {
-      featuredPoets.value = []
+    let rows = []
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('poets')
+        .select('id,name,dynasty,avatar')
+        .in('name', featuredPoetNames)
+      if (!error && data && data.length) {
+        const map = new Map(data.map(d => [d.name, d]))
+        rows = featuredPoetNames.map(n => map.get(n)).filter(Boolean)
+      } else {
+        // 兜底：取按 name 排序的前4位
+        const { data: latest, error: e2 } = await supabase
+          .from('poets')
+          .select('id,name,dynasty,avatar')
+          .order('name', { ascending: true })
+          .limit(4)
+        if (!e2 && latest) rows = latest
+      }
     }
+    featuredPoets.value = rows || []
   } catch {
     featuredPoets.value = []
   } finally {
