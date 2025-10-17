@@ -66,23 +66,9 @@ const sendMessage = async () => {
   scrollToBottom();
 
   const aiResponse = await askAi(userMessage);
-  
-  // The n8n workflow might return a JSON object/string. We need to parse it correctly.
-  let assistantMessage = '抱歉，我暂时无法回答。';
-  try {
-    // The response from n8n is a stringified JSON inside the 'body' and 'data'
-    const parsedResponse = JSON.parse(aiResponse);
-    if(parsedResponse.body && parsedResponse.body.data) {
-        assistantMessage = parsedResponse.body.data;
-    } else if (typeof parsedResponse === 'string') {
-        assistantMessage = parsedResponse;
-    }
-  } catch (e) {
-    // If it's not a JSON string, use it as is.
-    if (typeof aiResponse === 'string') {
-        assistantMessage = aiResponse;
-    }
-  }
+
+  // askAi 已经归一化为字符串，这里直接展示即可
+  const assistantMessage = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
 
   messages.value.push({ sender: 'assistant', text: assistantMessage });
   isLoading.value = false;
