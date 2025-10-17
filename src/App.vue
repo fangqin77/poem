@@ -99,6 +99,7 @@
         </div>
       </div>
     </footer>
+    <AiAssistant />
   </div>
 </template>
 
@@ -106,6 +107,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/services/supabaseClient'
+import AiAssistant from './components/AiAssistant.vue'
 
 const router = useRouter()
 const q = ref('')
