@@ -1,46 +1,97 @@
 const PROXY_API = '/api/ai';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
+const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);
 const ENDPOINT = isLocalHost ? PROXY_API : DIRECT_URL;
 
 async function post(url, message) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  const payloadJson = JSON.stringify({ message, text: message, prompt: message });
   try {
+    // 1) 首选：POST JSON
     const res = await fetch(url, {
       method: 'POST',
+      mode: 'cors',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ message })
+      body: payloadJson,
+      signal: controller.signal
     });
-    // 尝试优先解析为 JSON，失败则回退为文本
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error('http_' + res.status);
+    try { return await res.clone().json(); } catch { return await res.text(); }
+  } catch (e1) {
     try {
-      return await res.clone().json();
-    } catch {
-      return await res.text();
+      // 2) 回退：POST 表单
+      const form = new URLSearchParams({ message, text: message, prompt: message });
+      const res2 = await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+        body: form.toString(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!res2.ok) throw new Error('http_' + res2.status);
+      try { return await res2.clone().json(); } catch { return await res2.text(); }
+    } catch (e2) {
+      try {
+        // 3) 最后回退：GET 查询串
+        const q = encodeURIComponent(message);
+        const res3 = await fetch(`${url}?message=${q}&text=${q}&prompt=${q}`, {
+          method: 'GET',
+          mode: 'cors',
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (!res3.ok) throw new Error('http_' + res3.status);
+        try { return await res3.clone().json(); } catch { return await res3.text(); }
+      } catch (e3) {
+        clearTimeout(timeout);
+        return { error: 'network_error', message: e3?.message || e2?.message || e1?.message || 'fetch failed' };
+      }
     }
-  } catch (e) {
-    return { error: 'network_error', message: e?.message || 'fetch failed' };
   }
 }
 
 function normalize(payload) {
   try {
+    // 1) 处理字符串或字符串化 JSON
     if (typeof payload === 'string') {
-      // 某些情况下服务返回纯文本或字符串化JSON
-      try {
-        const maybeJson = JSON.parse(payload);
-        payload = maybeJson;
-      } catch { /* 保留为字符串 */ }
+      try { payload = JSON.parse(payload); } catch { return payload; }
     }
-    // n8n 标准输出字段
-    if (payload && typeof payload === 'object' && typeof payload.output === 'string') {
-      return payload.output;
+
+    // 2) 处理 n8n 常见返回：数组 [{ json: {...} }], 或 [{ body: ... }], 或 [{ data: ... }]
+    if (Array.isArray(payload) && payload.length > 0) {
+      const item = payload[0];
+      // 最常见结构：item.json 或 item.body 或 item.data
+      const candidate =
+        (item && item.json) ??
+        (item && item.body) ??
+        (item && item.data) ??
+        item;
+      return typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
     }
-    if (typeof payload === 'string') return payload;
-    if (payload?.data) return typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data);
-    if (payload?.body?.data) return typeof payload.body.data === 'string' ? payload.body.data : JSON.stringify(payload.body.data);
-    if (payload?.body) return typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body);
-    return JSON.stringify(payload);
+
+    // 3) 对象字段兼容
+    if (payload && typeof payload === 'object') {
+      // 标准字段
+      if (typeof payload.output === 'string') return payload.output;
+      // 常见字段
+      if (typeof payload.text === 'string') return payload.text;
+      if (typeof payload.message === 'string' && !payload.error) return payload.message;
+      if (payload.data) return typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data);
+      if (payload.body?.data) return typeof payload.body.data === 'string' ? payload.body.data : JSON.stringify(payload.body.data);
+      if (payload.body) return typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body);
+      // 兜底
+      return JSON.stringify(payload);
+    }
+
+    // 4) 其他类型兜底
+    return String(payload);
   } catch (e) {
     return typeof payload === 'string' ? payload : '抱歉，我暂时没有获得有效的回答。';
   }
@@ -51,18 +102,26 @@ export async function askAi(message) {
     const payload = await post(ENDPOINT, message);
     console.log('[AI] payload:', payload);
 
-    // n8n 测试模式 404 的友好提示
+    // 404 自动回退测试端点；若仍失败则提示激活
     if (payload && typeof payload === 'object' && payload.code === 404 && String(payload.message || '').includes('not registered')) {
+      try {
+        const testPayload = await post(TEST_URL, message);
+        const text = normalize(testPayload);
+        if (text && String(text).trim()) return text;
+      } catch {}
       return 'n8n Webhook 未激活。请在 n8n 画布点击“Execute workflow”后立即重试，或将工作流切换为激活（Active）以长期可用。';
     }
 
     return normalize(payload);
   } catch (err) {
     console.error('[AI] request failed:', err);
-    // 尝试最后一次直接走公网（防止误判环境）
+    // 兜底重试：激活端点 -> 测试端点
     try {
       const direct = await post(DIRECT_URL, message);
-      return normalize(direct);
+      const text1 = normalize(direct);
+      if (text1 && String(text1).trim()) return text1;
+      const testPayload = await post(TEST_URL, message);
+      return normalize(testPayload);
     } catch {
       return '抱歉，AI服务暂不可用，请稍后重试。';
     }
