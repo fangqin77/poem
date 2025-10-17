@@ -3,18 +3,28 @@ const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
 const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
-const isLocalHost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);
+const isLocalHost = (() => {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname || '';
+  // localhost/回环/0.0.0.0
+  if (/^(localhost|127\.|0\.0\.0\.0)/.test(h)) return true;
+  // 私有网段：10.x.x.x、192.168.x.x、172.16-31.x.x
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(h)) return true;
+  // 常见本地域名后缀
+  if (/\.(local|lan)$/i.test(h)) return true;
+  return false;
+})();
 const ENDPOINT = isLocalHost ? PROXY_API : DIRECT_URL;
 
 // 端点回退顺序与记忆
-const ENDPOINTS = [DIRECT_URL, TEST_URL];
+const ENDPOINTS = isLocalHost ? [PROXY_API, DIRECT_URL, TEST_URL] : [DIRECT_URL, TEST_URL];
 let LAST_GOOD = null;
 try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch {}
 
 async function post(url, message) {
   const payloadJson = JSON.stringify({ message, text: message, prompt: message });
 
-  const withTimeout = (promise, ms = 15000) =>
+  const withTimeout = (promise, ms = 20000) =>
     Promise.race([
       promise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout_' + ms)), ms))
@@ -101,7 +111,11 @@ function isOkPayload(payload) {
 
 async function tryRequest(message) {
   // 优先使用上次成功端点
-  const order = LAST_GOOD && ENDPOINTS.includes(LAST_GOOD) ? [LAST_GOOD, ...ENDPOINTS.filter(u => u !== LAST_GOOD)] : [...ENDPOINTS];
+  const order = isLocalHost
+    ? [PROXY_API, ...ENDPOINTS.filter(u => u !== PROXY_API)]
+    : (LAST_GOOD && ENDPOINTS.includes(LAST_GOOD)
+        ? [LAST_GOOD, ...ENDPOINTS.filter(u => u !== LAST_GOOD)]
+        : [...ENDPOINTS]);
   for (const url of order) {
     const payload = await retryPost(url, message);
     if (payload && typeof payload === 'object' && payload.code === 404) {
