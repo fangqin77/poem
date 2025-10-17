@@ -2,14 +2,27 @@ const PROXY_API = '/api/ai';                     // 本地中间件端点
 const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
 
 async function post(url, message) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ message })
-  });
-  const contentType = res.headers.get('content-type') || '';
-  let payload = contentType.includes('application/json') ? await res.json() : await res.text();
-  return payload;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+  } catch (e) {
+    // 网络错误或跨域失败
+    return { error: 'network_error', message: e?.message || 'fetch failed' };
+  }
+
+  const contentType = res?.headers?.get ? (res.headers.get('content-type') || '') : '';
+  try {
+    const isJson = contentType.includes('application/json');
+    const payload = isJson ? await res.json() : await res.text();
+    return payload;
+  } catch (e) {
+    // 响应体解析失败
+    return { error: 'parse_error', message: e?.message || 'response parse failed' };
+  }
 }
 
 function normalize(payload) {
