@@ -12,9 +12,62 @@ let LAST_GOOD = null;
 try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch {}
 
 async function post(url, message) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
   const payloadJson = JSON.stringify({ message, text: message, prompt: message });
+
+  const withTimeout = (promise, ms = 15000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout_' + ms)), ms))
+    ]);
+
+  try {
+    // 1) 首选：POST JSON
+    const res = await withTimeout(fetch(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: payloadJson
+    }));
+    if (!res.ok) {
+      const text = await res.text();
+      return { code: res.status, message: text || 'http_error' };
+    }
+    try { return await res.clone().json(); } catch { return await res.text(); }
+  } catch (e1) {
+    try {
+      // 2) 回退：POST 表单
+      const form = new URLSearchParams({ message, text: message, prompt: message });
+      const res2 = await withTimeout(fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+        body: form.toString()
+      }));
+      if (!res2.ok) {
+        const text = await res2.text();
+        return { code: res2.status, message: text || 'http_error' };
+      }
+      try { return await res2.clone().json(); } catch { return await res2.text(); }
+    } catch (e2) {
+      try {
+        // 3) 最后回退：GET 查询串
+        const q = encodeURIComponent(message);
+        const res3 = await withTimeout(fetch(`${url}?message=${q}&text=${q}&prompt=${q}`, {
+          method: 'GET',
+          mode: 'cors',
+          headers: { 'Accept': 'application/json' }
+        }));
+        if (!res3.ok) {
+          const text = await res3.text();
+          return { code: res3.status, message: text || 'http_error' };
+        }
+        try { return await res3.clone().json(); } catch { return await res3.text(); }
+      } catch (e3) {
+        return { error: 'network_error', message: e3?.message || e2?.message || e1?.message || 'fetch failed' };
+      }
+    }
+  }
+}
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -64,52 +117,6 @@ async function tryRequest(message) {
   // 都失败则返回最后一次的结果
   return await post(order[0], message);
 }
-  try {
-    // 1) 首选：POST JSON
-    const res = await fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: payloadJson,
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error('http_' + res.status);
-    try { return await res.clone().json(); } catch { return await res.text(); }
-  } catch (e1) {
-    try {
-      // 2) 回退：POST 表单
-      const form = new URLSearchParams({ message, text: message, prompt: message });
-      const res2 = await fetch(url, {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-        body: form.toString(),
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      if (!res2.ok) throw new Error('http_' + res2.status);
-      try { return await res2.clone().json(); } catch { return await res2.text(); }
-    } catch (e2) {
-      try {
-        // 3) 最后回退：GET 查询串
-        const q = encodeURIComponent(message);
-        const res3 = await fetch(`${url}?message=${q}&text=${q}&prompt=${q}`, {
-          method: 'GET',
-          mode: 'cors',
-          headers: { 'Accept': 'application/json' },
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
-        if (!res3.ok) throw new Error('http_' + res3.status);
-        try { return await res3.clone().json(); } catch { return await res3.text(); }
-      } catch (e3) {
-        clearTimeout(timeout);
-        return { error: 'network_error', message: e3?.message || e2?.message || e1?.message || 'fetch failed' };
-      }
-    }
-  }
-}
 
 function normalize(payload) {
   try {
@@ -130,6 +137,10 @@ function normalize(payload) {
       return typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
     }
 
+    // 网络错误友好提示
+    if (payload && typeof payload === 'object' && payload.error === 'network_error') {
+      return 'AI服务连接不稳定或超时，请稍后重试或刷新页面。';
+    }
     // 3) 对象字段兼容
     if (payload && typeof payload === 'object') {
       // 标准字段
