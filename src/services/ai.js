@@ -1,27 +1,25 @@
-const PROXY_API = '/api/ai';                     // 本地中间件端点
+const PROXY_API = '/api/ai';                     // 本地中间件端点（仅开发）
 const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
 
+// 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
+const isLocalHost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);
+const ENDPOINT = isLocalHost ? PROXY_API : DIRECT_URL;
+
 async function post(url, message) {
-  let res;
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ message })
     });
+    // 尝试优先解析为 JSON，失败则回退为文本
+    try {
+      return await res.clone().json();
+    } catch {
+      return await res.text();
+    }
   } catch (e) {
-    // 网络错误或跨域失败
     return { error: 'network_error', message: e?.message || 'fetch failed' };
-  }
-
-  const contentType = res?.headers?.get ? (res.headers.get('content-type') || '') : '';
-  try {
-    const isJson = contentType.includes('application/json');
-    const payload = isJson ? await res.json() : await res.text();
-    return payload;
-  } catch (e) {
-    // 响应体解析失败
-    return { error: 'parse_error', message: e?.message || 'response parse failed' };
   }
 }
 
@@ -49,25 +47,23 @@ function normalize(payload) {
 }
 
 export async function askAi(message) {
-  // 优先使用同源中间件端点
   try {
-    const viaProxy = await post(PROXY_API, message);
-    console.log('[AI] via local middleware payload:', viaProxy);
+    const payload = await post(ENDPOINT, message);
+    console.log('[AI] payload:', payload);
 
-    // 针对 n8n 测试模式 404 的友好提示
-    if (viaProxy && typeof viaProxy === 'object' && viaProxy.code === 404 && String(viaProxy.message || '').includes('not registered')) {
+    // n8n 测试模式 404 的友好提示
+    if (payload && typeof payload === 'object' && payload.code === 404 && String(payload.message || '').includes('not registered')) {
       return 'n8n Webhook 未激活。请在 n8n 画布点击“Execute workflow”后立即重试，或将工作流切换为激活（Active）以长期可用。';
     }
 
-    return normalize(viaProxy);
-  } catch (proxyErr) {
-    console.warn('[AI] local middleware failed, fallback to cross-origin...', proxyErr);
+    return normalize(payload);
+  } catch (err) {
+    console.error('[AI] request failed:', err);
+    // 尝试最后一次直接走公网（防止误判环境）
     try {
       const direct = await post(DIRECT_URL, message);
-      console.log('[AI] direct payload:', direct);
       return normalize(direct);
-    } catch (directErr) {
-      console.error('[AI] direct failed:', directErr);
+    } catch {
       return '抱歉，AI服务暂不可用，请稍后重试。';
     }
   }
