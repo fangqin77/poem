@@ -1,5 +1,5 @@
 const PROXY_API = '/api/ai';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);

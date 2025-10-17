@@ -34,6 +34,42 @@
 import { ref, nextTick } from 'vue';
 import { askAi } from '@/services/ai.js';
 
+// 轻量 Markdown 清理：去掉 #、**、`、--- 等符号，并美化列表为圆点
+function beautifyText(input) {
+  try {
+    let s = String(input ?? '').replace(/\r\n/g, '\n');
+
+    // 代码块与分隔线
+    s = s.replace(/```[\s\S]*?```/g, '');       // 去掉代码块
+    s = s.replace(/^\s*---+\s*$/gm, '');        // 去掉分隔线
+
+    // 标题：去掉行首 # 及空格
+    s = s.replace(/^\s*#{1,6}\s*/gm, '');
+
+    // 强调符号：** __ * _
+    s = s.replace(/\*\*(.*?)\*\*/g, '$1');
+    s = s.replace(/__(.*?)__/g, '$1');
+    s = s.replace(/\*(.*?)\*/g, '$1');
+    s = s.replace(/_(.*?)_/g, '$1');
+
+    // 行内代码：`text`
+    s = s.replace(/`([^`]+)`/g, '$1');
+
+    // 列表项：- * + -> 圆点
+    s = s.replace(/^[\t ]*[-*+]\s+/gm, '• ');
+
+    // 有序列表：保留数字与点
+    s = s.replace(/^[\t ]*(\d+)\.\s+/gm, (_m, n) => `${n}. `);
+
+    // 归一化多余空行
+    s = s.replace(/\n{3,}/g, '\n\n');
+
+    return s.trim();
+  } catch {
+    return typeof input === 'string' ? input : JSON.stringify(input);
+  }
+}
+
 const isChatOpen = ref(false);
 const userInput = ref('');
 const messages = ref([]);
@@ -67,8 +103,9 @@ const sendMessage = async () => {
 
   const aiResponse = await askAi(userMessage);
 
-  // askAi 已经归一化为字符串，这里直接展示即可
-  const assistantMessage = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
+  // askAi 已经归一化为字符串，展示前做轻量美化
+  const rawText = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
+  const assistantMessage = beautifyText(rawText);
 
   messages.value.push({ sender: 'assistant', text: assistantMessage });
   isLoading.value = false;

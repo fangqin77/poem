@@ -27,7 +27,7 @@
           >
             <h3 class="text-xl font-semibold text-gray-800 mb-2">{{ fp.title }}</h3>
             <p class="text-gray-600 mb-1">{{ fp.poet_name || '佚名' }} <span v-if="fp.dynasty">· {{ fp.dynasty }}</span></p>
-            <p class="text-gray-700 italic mt-4 line-clamp-3 whitespace-pre-line">{{ (fp.content || '').slice(0, 80) }}</p>
+            <p class="text-gray-700 italic mt-4 whitespace-pre-wrap">{{ (fp.content || '').replace(/\\n/g, '\n') }}</p>
           </RouterLink>
         </div>
 
@@ -84,7 +84,7 @@
               <span>{{ item.poet_name || '佚名' }}</span>
               <span v-if="item.dynasty"> · {{ item.dynasty }}</span>
             </p>
-            <p class="text-gray-700 line-clamp-2 mt-3 whitespace-pre-line">{{ (item.content || '').slice(0, 80) }}</p>
+            <p class="text-gray-700 mt-3 whitespace-pre-wrap">{{ (item.content || '').replace(/\\n/g, '\n') }}</p>
           </RouterLink>
         </div>
 
