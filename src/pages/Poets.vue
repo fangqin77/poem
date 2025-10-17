@@ -8,7 +8,7 @@
           v-for="p in items"
           :key="p.id"
           class="text-center group"
-          :to="`/poets/${p.id}`"
+          :to="{ name: 'poet-detail', params: { id: p.id } }"
         >
           <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-white shadow-lg mb-4">
             <img :src="p.avatar || defaultAvatar" :alt="p.name" class="w-full h-full object-cover" />

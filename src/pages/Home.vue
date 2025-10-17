@@ -23,7 +23,7 @@
             v-for="fp in featuredPoems"
             :key="fp.id"
             class="block bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
-            :to="`/poems/${fp.id}`"
+            :to="{ name: 'poem-detail', params: { id: fp.id } }"
           >
             <h3 class="text-xl font-semibold text-gray-800 mb-2">{{ fp.title }}</h3>
             <p class="text-gray-600 mb-1">{{ fp.poet_name || '佚名' }} <span v-if="fp.dynasty">· {{ fp.dynasty }}</span></p>
@@ -74,7 +74,7 @@
             v-for="item in filteredItems"
             :key="item.id"
             class="block bg-white rounded-lg p-5 border border-gray-100 shadow-sm hover:shadow-md transition"
-            :to="`/poems/${item.id}`"
+            :to="{ name: 'poem-detail', params: { id: item.id } }"
           >
             <div class="flex items-start justify-between">
               <h3 class="text-lg font-semibold text-gray-800">{{ item.title }}</h3>
@@ -108,18 +108,18 @@
             <span class="text-gray-700 font-medium group-hover:text-blue-600">唐诗</span>
           </RouterLink>
           <RouterLink to="/categories?type=song" class="flex flex-col items-center group">
-            <div class="w-20 h-20 rounded-full bg-green-100 flex items-center justify中心 mb-4">
+            <div class="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-4">
               <img src="https://ai-public.mastergo.com/ai/img_res/fd50175b2ce2b961988dbb29da21d38d.jpg" alt="宋词" class="w-12 h-12">
             </div>
             <span class="text-gray-700 font-medium group-hover:text-blue-600">宋词</span>
           </RouterLink>
           <RouterLink to="/categories?type=yuan" class="flex flex-col items-center group">
-            <div class="w-20 h-20 rounded-full bg紫色-100 flex items-center justify-center mb-4">
+            <div class="w-20 h-20 rounded-full bg-purple-100 flex items-center justify-center mb-4">
               <img src="https://ai-public.mastergo.com/ai/img_res/9d846d29f0e598481083be7b76ab677a.jpg" alt="元曲" class="w-12 h-12">
             </div>
             <span class="text-gray-700 font-medium group-hover:text-blue-600">元曲</span>
           </RouterLink>
-          <RouterLink to="/categories?type=gufeng" class="flex flex-col items中心 group">
+          <RouterLink to="/categories?type=gufeng" class="flex flex-col items-center group">
             <div class="w-20 h-20 rounded-full bg-yellow-100 flex items-center justify-center mb-4">
               <img src="https://ai-public.mastergo.com/ai/img_res/e9f4d79884121905add1d86fbbb314df.jpg" alt="古风" class="w-12 h-12">
             </div>
@@ -143,7 +143,7 @@
         <!-- 动态列表 -->
         <div v-if="featuredPoetsLoading" class="text-center text-gray-500">加载中…</div>
         <div v-else-if="featuredPoets.length" class="grid grid-cols-2 md:grid-cols-4 gap-8">
-          <RouterLink v-for="pt in featuredPoets" :key="pt.id" class="text-center group" :to="`/poets/${pt.id}`">
+          <RouterLink v-for="pt in featuredPoets" :key="pt.id" class="text-center group" :to="{ name: 'poet-detail', params: { id: pt.id } }">
             <div class="w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-white shadow-lg mb-4">
               <img :src="pt.avatar || defaultPoetAvatar" :alt="pt.name" class="w-full h-full object-cover" />
             </div>
@@ -288,7 +288,7 @@ async function gotoPoemByTitle(title) {
       .eq('title', title)
       .limit(1)
     const row = (!error && data && data[0]) ? data[0] : null
-    if (row?.id) router.push(`/poems/${row.id}`)
+    if (row?.id) router.push({ name: 'poem-detail', params: { id: row.id } })
   } catch {}
 }
 
@@ -300,7 +300,7 @@ async function gotoPoetByName(name) {
       .eq('name', name)
       .limit(1)
     const row = (!error && data && data[0]) ? data[0] : null
-    if (row?.id) router.push(`/poets/${row.id}`)
+    if (row?.id) router.push({ name: 'poet-detail', params: { id: row.id } })
   } catch {}
 }
 

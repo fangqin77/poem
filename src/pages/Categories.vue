@@ -11,7 +11,7 @@
             v-for="it in items"
             :key="it.id"
             class="block p-6 rounded-xl border bg-white hover:shadow transition"
-            :to="`/poems/${it.id}`"
+            :to="{ name: 'poem-detail', params: { id: it.id } }"
           >
             <h3 class="font-semibold text-gray-800">{{ it.title }}</h3>
             <p class="text-sm text-gray-500 mt-1">{{ it.poet_name || '佚名' }} <span v-if="it.dynasty">· {{ it.dynasty }}</span></p>
