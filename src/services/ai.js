@@ -6,10 +6,64 @@ const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
 const isLocalHost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);
 const ENDPOINT = isLocalHost ? PROXY_API : DIRECT_URL;
 
+// 端点回退顺序与记忆
+const ENDPOINTS = [DIRECT_URL, TEST_URL];
+let LAST_GOOD = null;
+try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch {}
+
 async function post(url, message) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   const payloadJson = JSON.stringify({ message, text: message, prompt: message });
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// 对 429/5xx/网络错误做指数退避重试；404 直接返回，交由上层回退端点
+async function retryPost(url, message) {
+  const delays = [300, 800, 1500];
+  for (let i = 0; i < delays.length; i++) {
+    const payload = await post(url, message);
+    if (payload && typeof payload === 'object' && payload.code) {
+      const code = Number(payload.code);
+      if (code === 404) return payload;               // 切端点
+      if (code === 429 || (code >= 500 && code <= 504)) {
+        const jitter = Math.floor(Math.random() * 120);
+        await sleep(delays[i] + jitter);
+        continue;
+      }
+    }
+    // 非错误对象或成功文本，直接返回
+    return payload;
+  }
+  // 最后再返回一次
+  return await post(url, message);
+}
+
+function isOkPayload(payload) {
+  try {
+    const txt = normalize(payload);
+    return typeof txt === 'string' && txt.trim().length > 0 && !/^n8n Webhook 未激活/.test(txt);
+  } catch { return false; }
+}
+
+async function tryRequest(message) {
+  // 优先使用上次成功端点
+  const order = LAST_GOOD && ENDPOINTS.includes(LAST_GOOD) ? [LAST_GOOD, ...ENDPOINTS.filter(u => u !== LAST_GOOD)] : [...ENDPOINTS];
+  for (const url of order) {
+    const payload = await retryPost(url, message);
+    if (payload && typeof payload === 'object' && payload.code === 404) {
+      // 404 换下一个端点
+      continue;
+    }
+    if (isOkPayload(payload)) {
+      try { window.localStorage.setItem('n8n_last_good', url); LAST_GOOD = url; } catch {}
+      return payload;
+    }
+    // 若不满足 isOk 但无明确错误，继续尝试下一个端点
+  }
+  // 都失败则返回最后一次的结果
+  return await post(order[0], message);
+}
   try {
     // 1) 首选：POST JSON
     const res = await fetch(url, {
@@ -99,7 +153,7 @@ function normalize(payload) {
 
 export async function askAi(message) {
   try {
-    const payload = await post(ENDPOINT, message);
+    const payload = await tryRequest(message);
     console.log('[AI] payload:', payload);
 
     // 404 自动回退测试端点；若仍失败则提示激活
