@@ -171,7 +171,11 @@
     // 保存 Webhook URL 至 localStorage
     const URL_KEY = "poetryChatWebhookUrl";
     const savedUrl = localStorage.getItem(URL_KEY);
-    if (savedUrl) webhookUrlInput.value = savedUrl;
+    if (savedUrl) {
+      webhookUrlInput.value = savedUrl;
+    } else {
+      webhookUrlInput.value = "https://fangqin.app.n8n.cloud/webhook-test/b93e74e1-6567-4c16-8ac7-f61789825618";
+    }
     webhookUrlInput.addEventListener("change", () => {
       localStorage.setItem(URL_KEY, webhookUrlInput.value.trim());
     });
