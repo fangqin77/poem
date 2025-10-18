@@ -1,6 +1,6 @@
 const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';
-const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/poem-chat';
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
+const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = (() => {
