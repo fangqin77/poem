@@ -107,7 +107,7 @@
     <div class="settings">
       <input id="webhookUrlInput" type="text" placeholder="填写你的 n8n Webhook URL，例如：https://your-n8n/webhook/poetry-qa" />
       <label class="widget-toggle"><input id="widgetModeToggle" type="checkbox" /> 小对话框模式</label>
-      <label class="widget-toggle"><input id="noCorsToggle" type="checkbox" /> 兼容模式（no-cors）</label>
+      <label class="widget-toggle"><input id="noCorsToggle" type="checkbox" checked /> 兼容模式（no-cors）</label>
       <div class="sid" id="sidView"></div>
     </div>
   </header>
@@ -170,7 +170,7 @@
     sidView.textContent = "会话ID: " + sessionId;
 
     // 固定使用指定的 n8n Webhook URL（不允许更改）
-    const WEBHOOK_URL = "https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31";
+    const WEBHOOK_URL = "https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31/";
     if (webhookUrlInput) {
       webhookUrlInput.value = WEBHOOK_URL;
       webhookUrlInput.disabled = true;
@@ -246,7 +246,13 @@
           fetchOpts.mode = "no-cors";
         }
 
-        const res = await fetch(webhookUrl, fetchOpts);
+        let res = await fetch(webhookUrl, fetchOpts);
+        if (!useNoCors && !res.ok && res.status === 404) {
+          const urlWithQuery = webhookUrl + "?" + new URLSearchParams({ chatInput, sessionId }).toString();
+          try {
+            res = await fetch(urlWithQuery, { method: "GET" });
+          } catch (_) {}
+        }
 
         if (useNoCors) {
           // 兼容模式：浏览器无法读取跨域响应，给出提示即可
