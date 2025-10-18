@@ -35,7 +35,7 @@ async function post(url, message) {
     const res = await withTimeout(fetch(url, {
       method: 'POST',
       mode: 'cors',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json, text/plain' },
       body: payloadJson
     }));
     if (!res.ok) {
@@ -50,7 +50,7 @@ async function post(url, message) {
       const res2 = await withTimeout(fetch(url, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json, text/plain' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8', 'Accept': 'application/json, text/plain' },
         body: form.toString()
       }));
       if (!res2.ok) {
