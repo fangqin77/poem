@@ -1,6 +1,6 @@
-const PROXY_API = '/api/ai';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/poetry-chat';
-const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/poetry-chat';
+const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';                     // 本地中间件端点（仅开发）
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';
+const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/poem-chat';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = (() => {
@@ -22,9 +22,9 @@ let LAST_GOOD = null;
 try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch {}
 
 async function post(url, message) {
-  const payloadJson = JSON.stringify({ message, text: message, prompt: message });
+  const payloadJson = JSON.stringify({ chatInput: message, message, text: message, prompt: message });
 
-  const withTimeout = (promise, ms = 45000) =>
+  const withTimeout = (promise, ms = 90000) =>
     Promise.race([
       promise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout_' + ms)), ms))
@@ -46,7 +46,7 @@ async function post(url, message) {
   } catch (e1) {
     try {
       // 2) 回退：POST 表单
-      const form = new URLSearchParams({ message, text: message, prompt: message });
+      const form = new URLSearchParams({ chatInput: message, message, text: message, prompt: message });
       const res2 = await withTimeout(fetch(url, {
         method: 'POST',
         mode: 'cors',
@@ -62,7 +62,7 @@ async function post(url, message) {
       try {
         // 3) 最后回退：GET 查询串
         const q = encodeURIComponent(message);
-        const res3 = await withTimeout(fetch(`${url}?message=${q}&text=${q}&prompt=${q}`, {
+        const res3 = await withTimeout(fetch(`${url}?chatInput=${q}&message=${q}&text=${q}&prompt=${q}`, {
           method: 'GET',
           mode: 'cors',
           headers: { 'Accept': 'application/json, text/plain' }
@@ -159,6 +159,7 @@ function normalize(payload) {
     if (payload && typeof payload === 'object') {
       // 标准字段
       if (typeof payload.output === 'string') return payload.output;
+      if (typeof payload.aiResponse === 'string') return payload.aiResponse;
       // 常见字段
       if (typeof payload.text === 'string') return payload.text;
       if (typeof payload.message === 'string' && !payload.error) return payload.message;
