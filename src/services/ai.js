@@ -1,6 +1,7 @@
 const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';                     // 本地中间件端点（仅开发）
 const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';
-const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
+// const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
+const TEST_URL = '/n8napi/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = (() => {
@@ -19,7 +20,7 @@ const ENDPOINT = isLocalHost ? PROXY_API : DIRECT_URL;
 // 端点回退顺序与记忆
 const ENDPOINTS = isLocalHost ? [PROXY_API, DIRECT_URL, TEST_URL] : [DIRECT_URL, TEST_URL];
 let LAST_GOOD = null;
-try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch {}
+try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n8n_last_good') : null; } catch (e) {}
 
 async function post(url, message) {
   const payloadJson = JSON.stringify({ chatInput: message, message, text: message, prompt: message });
@@ -31,49 +32,64 @@ async function post(url, message) {
     ]);
 
   try {
-    // 1) 首选：POST JSON
-    const res = await withTimeout(fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json, text/plain' },
-      body: payloadJson
+    // 1) 首选：GET（简单请求，通常不触发预检）
+    const q = encodeURIComponent(message);
+    const resGet = await withTimeout(fetch(`${url}?chatInput=${q}&message=${q}&text=${q}&prompt=${q}`, {
+      method: 'GET'
+      // 不加自定义头，保持“简单请求”
     }));
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error('http_' + res.status + (text ? (':' + text) : ''));
+    if (resGet.ok) {
+      try { return await resGet.clone().json(); } catch (e) { return await resGet.text(); }
+    } else {
+      const text = await resGet.text().catch(() => '');
+      throw new Error('http_' + resGet.status + (text ? (':' + text) : ''));
     }
-    try { return await res.clone().json(); } catch { return await res.text(); }
-  } catch (e1) {
+  } catch (e0) {
     try {
-      // 2) 回退：POST 表单
-      const form = new URLSearchParams({ chatInput: message, message, text: message, prompt: message });
-      const res2 = await withTimeout(fetch(url, {
+      // 2) 其次：POST JSON
+      const res = await withTimeout(fetch(url, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8', 'Accept': 'application/json, text/plain' },
-        body: form.toString()
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Accept': 'application/json, text/plain' },
+        body: payloadJson
       }));
-      if (!res2.ok) {
-        const text = await res2.text().catch(() => '');
-        throw new Error('http_' + res2.status + (text ? (':' + text) : ''));
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error('http_' + res.status + (text ? (':' + text) : ''));
       }
-      try { return await res2.clone().json(); } catch { return await res2.text(); }
-    } catch (e2) {
+      try { return await res.clone().json(); } catch (e) { return await res.text(); }
+    } catch (e1) {
       try {
-        // 3) 最后回退：GET 查询串
-        const q = encodeURIComponent(message);
-        const res3 = await withTimeout(fetch(`${url}?chatInput=${q}&message=${q}&text=${q}&prompt=${q}`, {
-          method: 'GET',
+        // 3) 回退：POST 表单
+        const form = new URLSearchParams({ chatInput: message, message, text: message, prompt: message });
+        const res2 = await withTimeout(fetch(url, {
+          method: 'POST',
           mode: 'cors',
-          headers: { 'Accept': 'application/json, text/plain' }
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8', 'Accept': 'application/json, text/plain' },
+          body: form.toString()
         }));
-        if (!res3.ok) {
-          const text = await res3.text().catch(() => '');
-          throw new Error('http_' + res3.status + (text ? (':' + text) : ''));
+        if (!res2.ok) {
+          const text = await res2.text().catch(() => '');
+          throw new Error('http_' + res2.status + (text ? (':' + text) : ''));
         }
-        try { return await res3.clone().json(); } catch { return await res3.text(); }
-      } catch (e3) {
-        return { error: 'network_error', message: e3?.message || e2?.message || e1?.message || 'fetch failed' };
+        try { return await res2.clone().json(); } catch (e) { return await res2.text(); }
+      } catch (e2) {
+        try {
+          // 4) 最后兜底：再尝试一次 GET（带 Accept，若服务端允许跨域读取）
+          const q2 = encodeURIComponent(message);
+          const res3 = await withTimeout(fetch(`${url}?chatInput=${q2}&message=${q2}&text=${q2}&prompt=${q2}`, {
+            method: 'GET',
+            mode: 'cors',
+            headers: { 'Accept': 'application/json, text/plain' }
+          }));
+          if (!res3.ok) {
+            const text = await res3.text().catch(() => '');
+            return { error: 'network_error', message: 'http_' + res3.status + (text ? (':' + text) : '') };
+          }
+          try { return await res3.clone().json(); } catch (e) { return await res3.text(); }
+        } catch (e3) {
+          return { error: 'network_error', message: e3?.message || e2?.message || e1?.message || e0?.message || 'fetch failed' };
+        }
       }
     }
   }
@@ -106,7 +122,7 @@ function isOkPayload(payload) {
   try {
     const txt = normalize(payload);
     return typeof txt === 'string' && txt.trim().length > 0 && !/^n8n Webhook 未激活/.test(txt);
-  } catch { return false; }
+  } catch (e) { return false; }
 }
 
 async function tryRequest(message) {
@@ -123,7 +139,7 @@ async function tryRequest(message) {
       continue;
     }
     if (isOkPayload(payload)) {
-      try { window.localStorage.setItem('n8n_last_good', url); LAST_GOOD = url; } catch {}
+      try { window.localStorage.setItem('n8n_last_good', url); LAST_GOOD = url; } catch (e) {}
       return payload;
     }
     // 若不满足 isOk 但无明确错误，继续尝试下一个端点
@@ -136,7 +152,7 @@ function normalize(payload) {
   try {
     // 1) 处理字符串或字符串化 JSON
     if (typeof payload === 'string') {
-      try { payload = JSON.parse(payload); } catch { return payload; }
+      try { payload = JSON.parse(payload); } catch (e) { return payload; }
     }
 
     // 2) 处理 n8n 常见返回：数组 [{ json: {...} }], 或 [{ body: ... }], 或 [{ data: ... }]
@@ -188,7 +204,7 @@ export async function askAi(message) {
         const testPayload = await post(TEST_URL, message);
         const text = normalize(testPayload);
         if (text && String(text).trim()) return text;
-      } catch {}
+      } catch (e) {}
       return 'n8n Webhook 未激活。请在 n8n 画布点击“Execute workflow”后立即重试，或将工作流切换为激活（Active）以长期可用。';
     }
 
@@ -202,7 +218,7 @@ export async function askAi(message) {
       if (text1 && String(text1).trim()) return text1;
       const testPayload = await post(TEST_URL, message);
       return normalize(testPayload);
-    } catch {
+    } catch (e) {
       return '抱歉，AI服务暂不可用，请稍后重试。';
     }
   }

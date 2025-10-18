@@ -56,6 +56,13 @@ export default defineConfig({
   },
   server: {
     cors: true,
-    allowedHosts: ['fangqin.app.n8n.cloud']
+    allowedHosts: ['fangqin.app.n8n.cloud'],
+    proxy: {
+      '^/n8napi/': {
+        target: 'https://fangqin.app.n8n.cloud',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/n8napi/, '')
+      }
+    }
   }
 })
