@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI诗词助手聊天界面</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --primary: #2b6cb0;
+      --primary-weak: #e6f0ff;
+      --accent: #805ad5;
+      --text: #1a202c;
+      --muted: #718096;
+      --ai: #0f766e;
+      --ai-weak: #e6fffa;
+      --border: #e2e8f0;
+      --danger: #e53e3e;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+    }
+    header .title { font-weight: 600; }
+    header .settings {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 760px;
+      width: 100%;
+    }
+    .widget-mode main {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      width: 360px;
+      max-width: 90vw;
+      height: 540px;
+      max-height: 75vh;
+      z-index: 20;
+      padding: 0;
+    }
+    .widget-mode main .preset-bar { display: none; }
+    .widget-mode main .chat { min-height: unset; height: calc(100% - 140px); }
+    .widget-mode main .composer { position: static; }
+    .widget-toggle {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
+    }
+    header input[type="text"] {
+      width: 360px; max-width: 60vw;
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; outline: none;
+    }
+    header input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-weak); }
+    header .sid { font-size: 12px; color: var(--muted); }
+    main {
+      max-width: 960px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 1fr; gap: 12px;
+    }
+    .preset-bar {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 8px;
+    }
+    .preset-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .preset-btn {
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; cursor: pointer; transition: all .2s;
+      text-align: center; font-weight: 500;
+    }
+    .preset-btn:hover { border-color: var(--primary); background: var(--primary-weak); color: var(--primary); }
+    .preset-feedback { font-size: 12px; color: var(--muted); }
+    .chat {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-height: 50vh;
+      display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
+    }
+    .msg { display: flex; gap: 10px; align-items: flex-start; }
+    .msg .bubble {
+      max-width: 80%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); line-height: 1.6;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .msg.user { justify-content: flex-end; }
+    .msg.user .bubble { background: var(--primary-weak); border-color: #cfe0ff; }
+    .msg.ai .bubble { background: var(--ai-weak); border-color: #b2f5ea; }
+    .msg .from { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .composer {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+      position: sticky; bottom: 0;
+    }
+    .composer textarea {
+      width: 100%; height: 72px; resize: vertical; padding: 10px; border: 1px solid var(--border); border-radius: 10px; outline: none;
+    }
+    .composer textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-weak); }
+    .send-btn {
+      padding: 10px 18px; border-radius: 10px; border: none; background: var(--primary); color: #fff; cursor: pointer; font-weight: 600;
+    }
+    .send-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .loading { color: var(--muted); font-style: italic; }
+    .error { color: var(--danger); }
+    footer { text-align: center; padding: 12px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 640px) {
+      header .settings { flex-direction: column; align-items: flex-start; }
+      header input[type="text"] { width: 100%; max-width: 100%; }
+      .preset-buttons { grid-template-columns: 1fr; }
+      .msg .bubble { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">AI诗词助手</div>
+    <div class="settings">
+      <input id="webhookUrlInput" type="text" placeholder="填写你的 n8n Webhook URL，例如：https://your-n8n/webhook/poetry-qa" />
+      <label class="widget-toggle"><input id="widgetModeToggle" type="checkbox" /> 小对话框模式</label>
+      <div class="sid" id="sidView"></div>
+    </div>
+  </header>
+  <main>
+    <section class="preset-bar">
+      <div class="preset-buttons">
+        <button class="preset-btn" data-message="请帮我赏析一首诗">帮我赏析一首诗</button>
+        <button class="preset-btn" data-message="我想创作一首诗">我想创作一首诗</button>
+        <button class="preset-btn" data-message="推荐经典诗词">推荐经典诗词</button>
+        <button class="preset-btn" data-message="知识问答">知识问答</button>
+      </div>
+      <div class="preset-feedback" id="presetFeedback">未选择预设功能</div>
+    </section>
+
+    <section class="chat" id="chat">
+      <!-- 对话消息会插入到这里 -->
+    </section>
+
+    <section class="composer">
+      <textarea id="input" placeholder="像普通聊天一样输入消息，按回车或点击发送"></textarea>
+      <button id="sendBtn" class="send-btn">发送</button>
+    </section>
+  </main>
+
+  <footer>所有请求通过 POST 发送至你的 n8n Webhook，返回的 aiResponse 将展示在对话中。</footer>
+
+  <script>
+    // 切换小对话框模式
+    const widgetToggle = document.getElementById("widgetModeToggle");
+    widgetToggle && widgetToggle.addEventListener("change", () => {
+      document.body.classList.toggle("widget-mode", widgetToggle.checked);
+    });
+
+    // 简单 UUID 生成（会话ID）
+    function uuidv4() {
+      // 非加密版，足够用于会话标识
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    const chatEl = document.getElementById("chat");
+    // 最近一次出现的诗歌名称（匹配《...》）
+    let lastPoemTitle = "";
+
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("sendBtn");
+    const presetFeedbackEl = document.getElementById("presetFeedback");
+    const webhookUrlInput = document.getElementById("webhookUrlInput");
+    const sidView = document.getElementById("sidView");
+
+    // 读取/生成 sessionId
+    const SID_KEY = "poetryChatSessionId";
+    let sessionId = localStorage.getItem(SID_KEY);
+    if (!sessionId) {
+      sessionId = uuidv4();
+      localStorage.setItem(SID_KEY, sessionId);
+    }
+    sidView.textContent = "会话ID: " + sessionId;
+
+    // 保存 Webhook URL 至 localStorage
+    const URL_KEY = "poetryChatWebhookUrl";
+    const savedUrl = localStorage.getItem(URL_KEY);
+    if (savedUrl) webhookUrlInput.value = savedUrl;
+    webhookUrlInput.addEventListener("change", () => {
+      localStorage.setItem(URL_KEY, webhookUrlInput.value.trim());
+    });
+
+    function scrollToBottom() {
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function addMessageBubble(role, text, extraClass) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "msg " + (role === "user" ? "user" : "ai");
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble" + (extraClass ? " " + extraClass : "");
+      bubble.textContent = text;
+
+      // 记录最近出现的《诗歌名称》
+      const matchTitle = /《([^》]+)》/.exec(text);
+      if (matchTitle && matchTitle[1]) {
+        lastPoemTitle = matchTitle[1];
+      }
+
+      wrapper.appendChild(bubble);
+      chatEl.appendChild(wrapper);
+      scrollToBottom();
+      return { wrapper, bubble };
+    }
+
+    async function sendMessage(text) {
+      const webhookUrl = (webhookUrlInput.value || "").trim();
+      if (!webhookUrl) {
+        addMessageBubble("ai", "请先在顶部输入你的 n8n Webhook URL。", "error");
+        return;
+      }
+      if (!text || !text.trim()) return;
+
+      // 展示用户消息
+      addMessageBubble("user", text);
+
+      // 展示加载提示
+      const { bubble: loadingBubble } = addMessageBubble("ai", "思考中…", "loading");
+
+      // 禁用输入
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+
+      // 指代性问题辅助：当用户问“它的作者是谁？”等，自动补充最近作品提示
+      const pronounIntent = /它的作者是谁|作者是谁|它是谁写的|是谁写的/.test(text);
+      let chatInput = text;
+      if (pronounIntent && lastPoemTitle) {
+        chatInput = `${text}（上下文提示：最近提到的作品《${lastPoemTitle}》）`;
+      }
+
+      // 构造请求体（严格遵循 { chatInput, sessionId }）
+      const payload = {
+        chatInput,
+        sessionId: sessionId
+      };
+
+      try {
+        const res = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+
+        const data = await res.json().catch(() => ({}));
+        const aiText = (data && data.aiResponse) ? String(data.aiResponse) : "抱歉，未获取到有效响应（缺少 aiResponse 字段）。";
+
+        // 替换加载提示为 AI 结果
+        loadingBubble.textContent = aiText;
+        loadingBubble.classList.remove("loading");
+      } catch (err) {
+        loadingBubble.textContent = "请求失败：" + err.message;
+        loadingBubble.classList.remove("loading");
+        loadingBubble.classList.add("error");
+      } finally {
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+        scrollToBottom();
+      }
+    }
+
+    // 发送按钮
+    sendBtn.addEventListener("click", () => {
+      const text = inputEl.value.trim();
+      if (text) {
+        inputEl.value = "";
+        sendMessage(text);
+      }
+    });
+
+    // 回车发送（Shift+Enter 换行）
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const text = inputEl.value.trim();
+        if (text) {
+          inputEl.value = "";
+          sendMessage(text);
+        }
+      }
+    });
+
+    // 预设按钮自动发送
+    document.querySelectorAll(".preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const msg = btn.getAttribute("data-message") || btn.textContent || "";
+        // 视觉反馈
+        presetFeedbackEl.textContent = "已选择：" + (btn.textContent || "预设功能");
+        // 自动发送
+        sendMessage(msg);
+      });
+    });
+
+    // 初始欢迎提示（可选）
+    addMessageBubble("ai", "嗨，我是你的AI诗词助手。你可以直接输入问题，或点击上方按钮开始。");
+  </script>
+</body>
+</html>
