@@ -1,5 +1,5 @@
 const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';
 const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
@@ -39,8 +39,8 @@ async function post(url, message) {
       body: payloadJson
     }));
     if (!res.ok) {
-      const text = await res.text();
-      return { code: res.status, message: text || 'http_error' };
+      const text = await res.text().catch(() => '');
+      throw new Error('http_' + res.status + (text ? (':' + text) : ''));
     }
     try { return await res.clone().json(); } catch { return await res.text(); }
   } catch (e1) {
@@ -54,8 +54,8 @@ async function post(url, message) {
         body: form.toString()
       }));
       if (!res2.ok) {
-        const text = await res2.text();
-        return { code: res2.status, message: text || 'http_error' };
+        const text = await res2.text().catch(() => '');
+        throw new Error('http_' + res2.status + (text ? (':' + text) : ''));
       }
       try { return await res2.clone().json(); } catch { return await res2.text(); }
     } catch (e2) {
@@ -68,8 +68,8 @@ async function post(url, message) {
           headers: { 'Accept': 'application/json, text/plain' }
         }));
         if (!res3.ok) {
-          const text = await res3.text();
-          return { code: res3.status, message: text || 'http_error' };
+          const text = await res3.text().catch(() => '');
+          throw new Error('http_' + res3.status + (text ? (':' + text) : ''));
         }
         try { return await res3.clone().json(); } catch { return await res3.text(); }
       } catch (e3) {
