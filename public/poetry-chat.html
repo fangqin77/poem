@@ -278,7 +278,7 @@
         <input id="webhookUrlInput" type="text" placeholder="填写你的 n8n Webhook URL" />
       </div>
       <div class="settings-group">
-        <label><input id="noCorsToggle" type="checkbox" checked /> 兼容模式 (no-cors)</label>
+        <label><input id="noCorsToggle" type="checkbox" /> 兼容模式 (no-cors)</label>
         <label>请求方法:
           <select id="methodSelect">
             <option value="POST" selected>POST</option>
@@ -449,7 +449,18 @@
           loadingBubble.textContent = aiText;
         }
       } catch (err) {
-        loadingBubble.textContent = "请求失败：" + err.message;
+        let errorMsg = "AI服务连接失败：" + err.message;
+        // 'Failed to fetch' is a common indicator of a CORS issue when the request isn't 'no-cors'.
+        if (err instanceof TypeError && err.message === 'Failed to fetch') {
+          errorMsg = `AI服务连接失败。这通常由跨域（CORS）问题引起。
+
+请检查：
+1. 在设置中填写的 n8n Webhook URL 是否正确。
+2. 您的 n8n 工作流是否已正确配置 CORS 响应头 (Access-Control-Allow-Origin: *)。
+
+如果无法配置 n8n，可以临时勾选“兼容模式”以发送请求，但这将无法接收 AI 的回复。`;
+        }
+        loadingBubble.textContent = errorMsg;
         loadingBubble.parentElement.classList.add("error");
       } finally {
         loadingBubble.parentElement.classList.remove("loading");
@@ -493,7 +504,7 @@
 
     // Initial welcome message
     setTimeout(() => {
-        addMessageBubble("ai", "你好，我是你的AI诗词助手。无论是诗词赏析、创作灵感，还是相关知识问答，都可以问我。");
+        addMessageBubble("ai", "您好! 我是您的AI助手, 有什么可以帮助您的吗?");
     }, 500);
 
   </script>
