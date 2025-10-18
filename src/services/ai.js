@@ -1,6 +1,6 @@
 const PROXY_API = '/api/ai';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/chat';
-const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/chat';
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook-test/poetry-chat';
+const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/poetry-chat';
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = (() => {
@@ -24,7 +24,7 @@ try { LAST_GOOD = typeof window !== 'undefined' ? window.localStorage.getItem('n
 async function post(url, message) {
   const payloadJson = JSON.stringify({ message, text: message, prompt: message });
 
-  const withTimeout = (promise, ms = 20000) =>
+  const withTimeout = (promise, ms = 45000) =>
     Promise.race([
       promise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout_' + ms)), ms))
@@ -35,7 +35,7 @@ async function post(url, message) {
     const res = await withTimeout(fetch(url, {
       method: 'POST',
       mode: 'cors',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain' },
       body: payloadJson
     }));
     if (!res.ok) {
@@ -50,7 +50,7 @@ async function post(url, message) {
       const res2 = await withTimeout(fetch(url, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json, text/plain' },
         body: form.toString()
       }));
       if (!res2.ok) {
@@ -65,7 +65,7 @@ async function post(url, message) {
         const res3 = await withTimeout(fetch(`${url}?message=${q}&text=${q}&prompt=${q}`, {
           method: 'GET',
           mode: 'cors',
-          headers: { 'Accept': 'application/json' }
+          headers: { 'Accept': 'application/json, text/plain' }
         }));
         if (!res3.ok) {
           const text = await res3.text();
@@ -83,7 +83,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // 对 429/5xx/网络错误做指数退避重试；404 直接返回，交由上层回退端点
 async function retryPost(url, message) {
-  const delays = [300, 800, 1500];
+  const delays = [600, 1500, 3000, 5000];
   for (let i = 0; i < delays.length; i++) {
     const payload = await post(url, message);
     if (payload && typeof payload === 'object' && payload.code) {
