@@ -107,6 +107,7 @@
     <div class="settings">
       <input id="webhookUrlInput" type="text" placeholder="填写你的 n8n Webhook URL，例如：https://your-n8n/webhook/poetry-qa" />
       <label class="widget-toggle"><input id="widgetModeToggle" type="checkbox" /> 小对话框模式</label>
+      <label class="widget-toggle"><input id="noCorsToggle" type="checkbox" /> 兼容模式（no-cors）</label>
       <div class="sid" id="sidView"></div>
     </div>
   </header>
@@ -168,17 +169,13 @@
     }
     sidView.textContent = "会话ID: " + sessionId;
 
-    // 保存 Webhook URL 至 localStorage
-    const URL_KEY = "poetryChatWebhookUrl";
-    const savedUrl = localStorage.getItem(URL_KEY);
-    if (savedUrl) {
-      webhookUrlInput.value = savedUrl;
-    } else {
-      webhookUrlInput.value = "https://fangqin.app.n8n.cloud/webhook-test/b93e74e1-6567-4c16-8ac7-f61789825618";
+    // 固定使用指定的 n8n Webhook URL（不允许更改）
+    const WEBHOOK_URL = "https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31";
+    if (webhookUrlInput) {
+      webhookUrlInput.value = WEBHOOK_URL;
+      webhookUrlInput.disabled = true;
+      webhookUrlInput.placeholder = "Webhook 已固定";
     }
-    webhookUrlInput.addEventListener("change", () => {
-      localStorage.setItem(URL_KEY, webhookUrlInput.value.trim());
-    });
 
     function scrollToBottom() {
       chatEl.scrollTop = chatEl.scrollHeight;
@@ -205,9 +202,9 @@
     }
 
     async function sendMessage(text) {
-      const webhookUrl = (webhookUrlInput.value || "").trim();
+      const webhookUrl = WEBHOOK_URL;
       if (!webhookUrl) {
-        addMessageBubble("ai", "请先在顶部输入你的 n8n Webhook URL。", "error");
+        addMessageBubble("ai", "Webhook 未配置。", "error");
         return;
       }
       if (!text || !text.trim()) return;
@@ -236,22 +233,45 @@
       };
 
       try {
-        const res = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        // 使用表单提交，避免 CORS 预检
+        const form = new URLSearchParams({ chatInput, sessionId });
+        const useNoCors = (document.getElementById("noCorsToggle")?.checked) === true;
 
-        if (!res.ok) {
-          throw new Error("HTTP " + res.status);
+        const fetchOpts = {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString()
+        };
+        if (useNoCors) {
+          fetchOpts.mode = "no-cors";
         }
 
-        const data = await res.json().catch(() => ({}));
-        const aiText = (data && data.aiResponse) ? String(data.aiResponse) : "抱歉，未获取到有效响应（缺少 aiResponse 字段）。";
+        const res = await fetch(webhookUrl, fetchOpts);
 
-        // 替换加载提示为 AI 结果
-        loadingBubble.textContent = aiText;
-        loadingBubble.classList.remove("loading");
+        if (useNoCors) {
+          // 兼容模式：浏览器无法读取跨域响应，给出提示即可
+          loadingBubble.textContent = "已发送（兼容模式）：请求已提交，浏览器无法读取跨域响应。请在 n8n 查看执行记录。";
+          loadingBubble.classList.remove("loading");
+        } else {
+          // 正常模式：优先解析 JSON；否则回退到原文文本
+          const ct = res.headers.get("content-type") || "";
+          let aiText = "";
+          if (ct.includes("application/json")) {
+            const data = await res.json().catch(() => ({}));
+            aiText = (data && data.aiResponse)
+              ? String(data.aiResponse)
+              : (`服务返回 JSON，但未包含 aiResponse 字段：
+${JSON.stringify(data, null, 2)}`);
+          } else {
+            const raw = await res.text().catch(() => "");
+            aiText = raw || "抱歉，未获取到有效响应。";
+          }
+          if (!res.ok) {
+            aiText = "HTTP " + res.status + " — " + aiText;
+          }
+          loadingBubble.textContent = aiText;
+          loadingBubble.classList.remove("loading");
+        }
       } catch (err) {
         loadingBubble.textContent = "请求失败：" + err.message;
         loadingBubble.classList.remove("loading");
