@@ -1,7 +1,6 @@
-const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';                     // 本地中间件端点（仅开发）
-const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poem-chat';
-// const TEST_URL   = 'https://fangqin.app.n8n.cloud/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
-const TEST_URL = '/n8napi/webhook-test/86681566-bb4e-4f95-a966-33ad7ad23a31';
+const PROXY_API = 'https://fangqin.app.n8n.cloud/webhook/poetry-chat';                     // 本地中间件端点（仅开发，指向生产端点以便同源代理）
+const DIRECT_URL = 'https://fangqin.app.n8n.cloud/webhook/poetry-chat';                    // 生产激活端点（游客可长期使用）
+const TEST_URL = 'https://fangqin.app.n8n.cloud/webhook-test/poetry-chat';                 // 测试端点（需手动Execute，一次性）
 
 // 根据环境选择端点：生产直接走 n8n 公网，开发走同源中间件
 const isLocalHost = (() => {
@@ -42,6 +41,8 @@ async function post(url, message) {
       try { return await resGet.clone().json(); } catch (e) { return await resGet.text(); }
     } else {
       const text = await resGet.text().catch(() => '');
+      // 尝试优先展示服务端返回内容（即便非 2xx），避免游客看到报错
+      try { return JSON.parse(text); } catch (_) { if (text) return text; }
       throw new Error('http_' + resGet.status + (text ? (':' + text) : ''));
     }
   } catch (e0) {
@@ -173,6 +174,10 @@ function normalize(payload) {
     }
     // 3) 对象字段兼容
     if (payload && typeof payload === 'object') {
+      // 特定服务端信息友好化
+      if (typeof payload.message === 'string' && /Unused Respond to Webhook node/i.test(payload.message)) {
+        return 'AI服务暂未返回内容（服务端缺少响应节点）。请稍后重试或联系管理员在工作流中添加 Respond to Webhook 节点并激活。';
+      }
       // 标准字段
       if (typeof payload.output === 'string') return payload.output;
       if (typeof payload.aiResponse === 'string') return payload.aiResponse;
